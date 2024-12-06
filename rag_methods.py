@@ -182,9 +182,9 @@ def get_conversational_rag_chain(llm):
     # Manually handle retrieval and combination
     def conversational_rag_chain(inputs):
         # Retrieve documents
-        retrieved_docs = retriever_chain(inputs)
+        retrieved_docs = retriever_chain.invoke(inputs)
         # Combine documents with the LLM response
-        response = stuff_documents_chain({
+        response = stuff_documents_chain.invoke({
             "context": retrieved_docs,
             **inputs
         })
