@@ -1,4 +1,4 @@
-# Do your LLM even RAG bro?
+# MetaMorphosis Ortho ChatBot
 
 RAG web application using Python, Streamlit and LangChain, so you can chat with Documents, Websites and other custom data.
 
@@ -17,6 +17,3 @@ $ pip install -r requirements.txt
 
 $ streamlit run app.py
 ```
-
-Video: https://youtu.be/abMwFViFFhI  
-Blog: https://medium.com/@enricdomingo  
