@@ -134,6 +134,9 @@ def _split_and_load_docs(docs):
 
     document_chunks = text_splitter.split_documents(docs)
 
+    for chunk in document_chunks:
+        chunk.metadata = {"source": chunk.metadata.get("source", "Unknown")}
+
     if "vector_db" not in st.session_state:
         st.session_state.vector_db = initialize_vector_db(docs)
     else:
@@ -142,8 +145,9 @@ def _split_and_load_docs(docs):
 
 # --- Retrieval Augmented Generation (RAG) Phase ---
 
+
 def _get_context_retriever_chain(vector_db, llm):
-    retriever = vector_db.as_retriever()
+    retriever = vector_db.as_retriever(search_type="mmr", search_kwargs={"k": 5})
     prompt = ChatPromptTemplate.from_messages([
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
@@ -174,14 +178,37 @@ def get_conversational_rag_chain(llm):
     ])
     stuff_documents_chain = create_stuff_documents_chain(llm, prompt)
 
-    return create_retrieval_chain(retriever_chain, stuff_documents_chain)
+    return create_retrieval_chain(
+        retriever_chain, 
+        stuff_documents_chain,
+        return_source_documents=True,)
 
 
 def stream_llm_rag_response(llm_stream, messages):
     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
     response_message = "*(RAG Response)*\n"
-    for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
-        response_message += chunk
-        yield chunk
+    references = []
 
+    for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
+        response_message += chunk["content"]
+
+        # Collect sources for references
+        if "source_documents" in chunk:
+            references.extend([doc.metadata["source"] for doc in chunk["source_documents"]])
+
+    # Format references
+    if references:
+        response_message += "\n\n**References Used:**\n"
+        response_message += "\n".join([f"- {ref}" for ref in set(references)])
+
+    yield chunk
     st.session_state.messages.append({"role": "assistant", "content": response_message})
+
+# def stream_llm_rag_response(llm_stream, messages):
+#     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
+#     response_message = "*(RAG Response)*\n"
+#     for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
+#         response_message += chunk
+#         yield chunk
+
+#     st.session_state.messages.append({"role": "assistant", "content": response_message})
