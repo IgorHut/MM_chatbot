@@ -16,6 +16,7 @@ from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import RetrievalQA
 
 dotenv.load_dotenv()
 
@@ -178,30 +179,41 @@ def get_conversational_rag_chain(llm):
     ])
     stuff_documents_chain = create_stuff_documents_chain(llm, prompt)
 
-    return create_retrieval_chain(
-        retriever_chain, 
-        stuff_documents_chain,
-        return_source_documents=True,)
+    # Manually handle source documents in the retrieval step
+    def custom_chain(input_data):
+        # Retrieve documents
+        retrieved_docs = retriever_chain.retrieve(input_data["input"])
+        source_documents = [doc.metadata["source"] for doc in retrieved_docs]
+
+        # Generate response
+        response = stuff_documents_chain.run({"context": retrieved_docs, "input": input_data["input"]})
+
+        return response, source_documents
+
+    return custom_chain
+
+    # return create_retrieval_chain(
+    #     retriever_chain, 
+    #     stuff_documents_chain,
+    #     return_source_documents=True,)
 
 
 def stream_llm_rag_response(llm_stream, messages):
-    conversation_rag_chain = get_conversational_rag_chain(llm_stream)
+    custom_chain = get_conversational_rag_chain(llm_stream)
     response_message = "*(RAG Response)*\n"
     references = []
 
-    for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
-        response_message += chunk["content"]
+    # Process input and collect output and references
+    response, references = custom_chain({"messages": messages[:-1], "input": messages[-1].content})
 
-        # Collect sources for references
-        if "source_documents" in chunk:
-            references.extend([doc.metadata["source"] for doc in chunk["source_documents"]])
+    response_message += response
 
     # Format references
     if references:
         response_message += "\n\n**References Used:**\n"
         response_message += "\n".join([f"- {ref}" for ref in set(references)])
 
-    yield chunk
+    yield response_message
     st.session_state.messages.append({"role": "assistant", "content": response_message})
 
 # def stream_llm_rag_response(llm_stream, messages):
