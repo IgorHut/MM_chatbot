@@ -16,7 +16,6 @@ from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains import RetrievalQA
 
 dotenv.load_dotenv()
 
@@ -164,68 +163,31 @@ def get_conversational_rag_chain(llm):
 
     prompt = ChatPromptTemplate.from_messages([
         ("system",
-        """You are a helpful assistant. You will have to answer to user's queries.
-        You will have some context to help with your answers, but now always would be completely related or helpful.
-        You can also use your knowledge to assist answering the user's queries.\n
-        {context}"""),
+        """As a knowledgeable orthopedic doctor with extensive clinical experience working primarily with children and young adults:
+        Use the following pieces of context to answer the question at the end.
+        - Base your answers solely on the provided context. Do not include information not supported by the context
+        - Help both medical and non-medical individuals find the information they are asking for
+        - Provide long, detailed, and thorough answers, explaining the reasoning behind them
+        - Maintain a compassionate, positive, and professional tone appropriate for all ages.
+        - If the answer isn't in the context, acknowledge this politely without speculating.
+        - Suggest at least one follow-up question to provide more details about the topic.
+        - Conclude with, "Is there anything else I can help you with?"
+        \n{context}"""),
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
     ])
+
     stuff_documents_chain = create_stuff_documents_chain(llm, prompt)
 
-    # Manually handle retrieval and combination
-    def conversational_rag_chain(inputs):
-        # Retrieve documents
-        retrieved_docs = retriever_chain.invoke(inputs)
-        # Combine documents with the LLM response
-        response = stuff_documents_chain.invoke({
-            "context": retrieved_docs,
-            **inputs
-        })
-        return {
-            "answer": response,
-            "source_documents": retrieved_docs
-        }
+    return create_retrieval_chain(retriever_chain, stuff_documents_chain)
 
-    return conversational_rag_chain
-
-    # return create_retrieval_chain(
-    #     retriever_chain, 
-    #     stuff_documents_chain,
-    #     return_source_documents=True,)
 
 
 def stream_llm_rag_response(llm_stream, messages):
     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
     response_message = "*(RAG Response)*\n"
-    references = []
-
-    # Prepare inputs for the chain
-    inputs = {"messages": messages[:-1], "input": messages[-1].content}
-
-    # Execute the chain
-    result = conversation_rag_chain(inputs)
-
-    # Stream the answer
-    for chunk in result["answer"]:
+    for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
         response_message += chunk
         yield chunk
 
-    # Collect sources for references
-    references.extend([doc.metadata["source"] for doc in result["source_documents"]])
-
-    # Format references
-    if references:
-        response_message += "\n\n**References Used:**\n"
-        response_message += "\n".join([f"- {ref}" for ref in set(references)])
-
     st.session_state.messages.append({"role": "assistant", "content": response_message})
-
-# def stream_llm_rag_response(llm_stream, messages):
-#     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
-#     response_message = "*(RAG Response)*\n"
-#     for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
-#         response_message += chunk
-#         yield chunk
-
-#     st.session_state.messages.append({"role": "assistant", "content": response_message})
