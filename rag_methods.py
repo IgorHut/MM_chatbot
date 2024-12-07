@@ -185,8 +185,8 @@ def get_conversational_rag_chain(llm):
 
     stuff_documents_chain = create_stuff_documents_chain(llm, prompt)
 
-    # Properly return the RetrievalQAWithSourcesChain
-    return RetrievalQAWithSourcesChain.from_components(
+    # Properly return the RetrievalQAWithSourcesChain using direct initialization
+    return RetrievalQAWithSourcesChain(
         retriever=retriever_chain,
         combine_documents_chain=stuff_documents_chain,
         return_source_documents=True
