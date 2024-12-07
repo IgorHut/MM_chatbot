@@ -129,8 +129,8 @@ def initialize_vector_db(docs):
 
 def _split_and_load_docs(docs):
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=2000,
-        chunk_overlap=200,
+        chunk_size=5000,
+        chunk_overlap=1000,
     )
 
     document_chunks = text_splitter.split_documents(docs)
@@ -164,16 +164,10 @@ def get_conversational_rag_chain(llm):
 
     prompt = ChatPromptTemplate.from_messages([
         ("system",
-        """As a knowledgeable orthopedic doctor with extensive clinical experience working primarily with children and young adults:
-        Use the following pieces of context to answer the question at the end.
-        - Base your answers solely on the provided context. Do not include information not supported by the context
-        - Help both medical and non-medical individuals find the information they are asking for
-        - Provide long, detailed, and thorough answers, explaining the reasoning behind them
-        - Maintain a compassionate, positive, and professional tone appropriate for all ages.
-        - If the answer isn't in the context, acknowledge this politely without speculating.
-        - Suggest at least one follow-up question to provide more details about the topic.
-        - Conclude with, "Is there anything else I can help you with?"
-        \n{context}"""),
+        """You are a helpful assistant. You will have to answer to user's queries.
+        You will have some context to help with your answers, but now always would be completely related or helpful.
+        You can also use your knowledge to assist answering the user's queries.\n
+        {context}"""),
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
     ])
