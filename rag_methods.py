@@ -164,6 +164,8 @@ def _get_context_retriever_chain(vector_db, llm):
     return retriever_chain
 
 
+from langchain.chains import RetrievalQAWithSourcesChain
+
 def get_conversational_rag_chain(llm):
     retriever_chain = _get_context_retriever_chain(st.session_state.vector_db, llm)
 
@@ -183,12 +185,11 @@ def get_conversational_rag_chain(llm):
         ("user", "{input}"),
     ])
 
-    stuff_documents_chain = create_stuff_documents_chain(llm, prompt)
-
-    # Properly return the RetrievalQAWithSourcesChain using direct initialization
-    return RetrievalQAWithSourcesChain(
+    return RetrievalQAWithSourcesChain.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
         retriever=retriever_chain,
-        combine_documents_chain=stuff_documents_chain,
+        chain_type_kwargs={"prompt": prompt},
         return_source_documents=True
     )
 
@@ -206,7 +207,7 @@ def stream_llm_rag_response(llm_stream, messages):
     response_message = "*(RAG Response)*\n"
 
     # Generate a response
-    result = conversation_rag_chain.invoke({
+    result = conversation_rag_chain.run({
         "messages": langchain_messages[:-1],
         "input": langchain_messages[-1].content
     })
