@@ -189,7 +189,10 @@ def get_conversational_rag_chain(llm):
         llm=llm,
         chain_type="stuff",
         retriever=retriever_chain,
-        chain_type_kwargs={"prompt": prompt},
+        chain_type_kwargs={
+            "prompt": prompt,
+            "document_variable_name": "context"  # Match this with the input variable in the prompt
+        },
         return_source_documents=True
     )
 
