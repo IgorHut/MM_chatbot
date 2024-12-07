@@ -14,13 +14,13 @@ from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.chains import create_history_aware_retriever, create_retrieval_chain
+from langchain.chains import create_history_aware_retriever, create_retrieval_chain, RetrievalQAWithSourcesChain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
 dotenv.load_dotenv()
 
 os.environ["USER_AGENT"] = "myagent"
-DB_DOCS_LIMIT = 10
+DB_DOCS_LIMIT = 20
 
 # Function to stream the response of the LLM 
 def stream_llm_response(llm_stream, messages):
@@ -81,7 +81,7 @@ def load_url_to_db():
         url = st.session_state.rag_url
         docs = []
         if url not in st.session_state.rag_sources:
-            if len(st.session_state.rag_sources) < 10:
+            if len(st.session_state.rag_sources) < 20:
                 try:
                     loader = WebBaseLoader(url)
                     docs.extend(loader.load())
@@ -128,14 +128,19 @@ def initialize_vector_db(docs):
 
 def _split_and_load_docs(docs):
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=5000,
-        chunk_overlap=1000,
+        chunk_size=2500,
+        chunk_overlap=300,
     )
 
     document_chunks = text_splitter.split_documents(docs)
 
     for chunk in document_chunks:
-        chunk.metadata = {"source": chunk.metadata.get("source", "Unknown")}
+        if not chunk.metadata:
+            chunk.metadata = {}
+        chunk.metadata["source"] = chunk.metadata.get("source", "Unknown")
+
+    # for chunk in document_chunks:
+    #     chunk.metadata = {"source": chunk.metadata.get("source", "Unknown")}
 
     if "vector_db" not in st.session_state:
         st.session_state.vector_db = initialize_vector_db(docs)
@@ -170,7 +175,7 @@ def get_conversational_rag_chain(llm):
         - Provide long, detailed, and thorough answers, explaining the reasoning behind them
         - Maintain a compassionate, positive, and professional tone appropriate for all ages.
         - If the answer isn't in the context, acknowledge this politely without speculating.
-        - Suggest at least one follow-up question to provide more details about the topic.
+        - Always suggest at least one follow-up question to provide more details about the topic.
         - Conclude with, "Is there anything else I can help you with?"
         \n{context}"""),
         MessagesPlaceholder(variable_name="messages"),
@@ -179,15 +184,32 @@ def get_conversational_rag_chain(llm):
 
     stuff_documents_chain = create_stuff_documents_chain(llm, prompt)
 
-    return create_retrieval_chain(retriever_chain, stuff_documents_chain)
+    return RetrievalQAWithSourcesChain(
+        retriever=retriever_chain,
+        combine_documents_chain=stuff_documents_chain,
+        return_source_documents=True  # Ensure source documents are returned
+    )
+
+    #return create_retrieval_chain(retriever_chain, stuff_documents_chain)
 
 
 
 def stream_llm_rag_response(llm_stream, messages):
     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
     response_message = "*(RAG Response)*\n"
-    for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
-        response_message += chunk
-        yield chunk
+    result = conversation_rag_chain({"messages": messages[:-1], "input": messages[-1].content})
+    response_message += result['answer']
+    
+    # Append sources to the response
+    if 'source_documents' in result:
+        response_message += "\n\n**Sources:**\n"
+        for doc in result['source_documents']:
+            source = doc.metadata.get('source', 'Unknown')
+            response_message += f"- {source}\n"
+    
+    yield response_message
+    # for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
+    #     response_message += chunk
+    #     yield chunk
 
     st.session_state.messages.append({"role": "assistant", "content": response_message})

@@ -34,7 +34,7 @@ else:
 
 
 st.set_page_config(
-    page_title="RAG LLM app?", 
+    page_title="MetaMorphosis RAG", 
     page_icon="📚", 
     layout="centered", 
     initial_sidebar_state="expanded"
@@ -42,7 +42,7 @@ st.set_page_config(
 
 
 # --- Header ---
-st.html("""<h2 style="text-align: center;">📚🔍 <i> Do your LLM even RAG bro? </i> 🤖💬</h2>""")
+st.html("""<h2 style="text-align: center;">📚🔍 <i> MetaMorophosis Expert ChatBot </i> 🤖💬</h2>""")
 
 
 # --- Initial Setup ---
@@ -186,8 +186,19 @@ else:
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
+            if not st.session_state.use_rag:
+                st.write_stream(stream_llm_response(llm_stream, st.session_state.messages))
+            else:
+                st.write_stream(stream_llm_rag_response(llm_stream, st.session_state.messages))
+
+    # if prompt := st.chat_input("Your message"):
+    #     st.session_state.messages.append({"role": "user", "content": prompt})
+    #     with st.chat_message("user"):
+    #         st.markdown(prompt)
+
+    #     with st.chat_message("assistant"):
+    #         message_placeholder = st.empty()
+    #         full_response = ""
 
             messages = [HumanMessage(content=m["content"]) if m["role"] == "user" else AIMessage(content=m["content"]) for m in st.session_state.messages]
 
