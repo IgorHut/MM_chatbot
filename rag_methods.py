@@ -193,7 +193,6 @@ def get_conversational_rag_chain(llm):
     )
 
 
-
 def stream_llm_rag_response(llm_stream, messages):
     # Convert messages to LangChain's format
     langchain_messages = []
@@ -202,7 +201,7 @@ def stream_llm_rag_response(llm_stream, messages):
             langchain_messages.append(HumanMessage(content=message["content"]))
         elif message["role"] == "assistant":
             langchain_messages.append(AIMessage(content=message["content"]))
-    
+
     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
     response_message = "*(RAG Response)*\n"
 
@@ -212,16 +211,24 @@ def stream_llm_rag_response(llm_stream, messages):
         "input": langchain_messages[-1].content
     })
 
-    # Log and validate result
-    if not isinstance(result, dict):
-        raise TypeError(f"[ERROR] Unexpected result type: {type(result)}")
-    
-    # Append the response and sources
-    response_message += result.get('answer', "No answer returned.")
-    if 'source_documents' in result:
+    # Inspect the result structure
+    if hasattr(result, "answer"):
+        response_message += getattr(result, "answer", "No answer returned.")
+    elif isinstance(result, dict) and "answer" in result:
+        response_message += result.get("answer", "No answer returned.")
+    else:
+        raise AttributeError("Unexpected result structure. Unable to extract 'answer'.")
+
+    # Append sources if present
+    if hasattr(result, "source_documents"):
         response_message += "\n\n**Sources:**\n"
-        for doc in result['source_documents']:
-            source = doc.metadata.get('source', 'Unknown')
+        for doc in getattr(result, "source_documents", []):
+            source = doc.metadata.get("source", "Unknown")
+            response_message += f"- {source}\n"
+    elif isinstance(result, dict) and "source_documents" in result:
+        response_message += "\n\n**Sources:**\n"
+        for doc in result["source_documents"]:
+            source = doc.metadata.get("source", "Unknown")
             response_message += f"- {source}\n"
 
     yield response_message
