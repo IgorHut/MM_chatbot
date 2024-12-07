@@ -186,19 +186,8 @@ else:
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            if not st.session_state.use_rag:
-                st.write_stream(stream_llm_response(llm_stream, st.session_state.messages))
-            else:
-                st.write_stream(stream_llm_rag_response(llm_stream, st.session_state.messages))
-
-    # if prompt := st.chat_input("Your message"):
-    #     st.session_state.messages.append({"role": "user", "content": prompt})
-    #     with st.chat_message("user"):
-    #         st.markdown(prompt)
-
-    #     with st.chat_message("assistant"):
-    #         message_placeholder = st.empty()
-    #         full_response = ""
+            message_placeholder = st.empty()
+            full_response = ""
 
             messages = [HumanMessage(content=m["content"]) if m["role"] == "user" else AIMessage(content=m["content"]) for m in st.session_state.messages]
 

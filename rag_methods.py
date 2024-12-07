@@ -14,9 +14,8 @@ from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.chains import create_history_aware_retriever, create_retrieval_chain, RetrievalQAWithSourcesChain
+from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.schema import HumanMessage, AIMessage
 
 dotenv.load_dotenv()
 
@@ -130,18 +129,13 @@ def initialize_vector_db(docs):
 def _split_and_load_docs(docs):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=2500,
-        chunk_overlap=300,
+        chunk_overlap=1000,
     )
 
     document_chunks = text_splitter.split_documents(docs)
 
     for chunk in document_chunks:
-        if not chunk.metadata:
-            chunk.metadata = {}
-        chunk.metadata["source"] = chunk.metadata.get("source", "Unknown")
-
-    # for chunk in document_chunks:
-    #     chunk.metadata = {"source": chunk.metadata.get("source", "Unknown")}
+        chunk.metadata = {"source": chunk.metadata.get("source", "Unknown")}
 
     if "vector_db" not in st.session_state:
         st.session_state.vector_db = initialize_vector_db(docs)
@@ -164,8 +158,6 @@ def _get_context_retriever_chain(vector_db, llm):
     return retriever_chain
 
 
-from langchain.chains import RetrievalQAWithSourcesChain
-
 def get_conversational_rag_chain(llm):
     retriever_chain = _get_context_retriever_chain(st.session_state.vector_db, llm)
 
@@ -185,55 +177,17 @@ def get_conversational_rag_chain(llm):
         ("user", "{input}"),
     ])
 
-    return RetrievalQAWithSourcesChain.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever_chain,
-        chain_type_kwargs={
-            "prompt": prompt,
-            "document_variable_name": "context"  # Match this with the input variable in the prompt
-        },
-        return_source_documents=True
-    )
+    stuff_documents_chain = create_stuff_documents_chain(llm, prompt)
+
+    return create_retrieval_chain(retriever_chain, stuff_documents_chain)
+
 
 
 def stream_llm_rag_response(llm_stream, messages):
-    # Convert messages to LangChain's format
-    langchain_messages = []
-    for message in messages:
-        if message["role"] == "user":
-            langchain_messages.append(HumanMessage(content=message["content"]))
-        elif message["role"] == "assistant":
-            langchain_messages.append(AIMessage(content=message["content"]))
-
     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
     response_message = "*(RAG Response)*\n"
+    for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
+        response_message += chunk
+        yield chunk
 
-    # Generate a response
-    result = conversation_rag_chain.run({
-        "messages": langchain_messages[:-1],
-        "input": langchain_messages[-1].content
-    })
-
-    # Inspect the result structure
-    if hasattr(result, "answer"):
-        response_message += getattr(result, "answer", "No answer returned.")
-    elif isinstance(result, dict) and "answer" in result:
-        response_message += result.get("answer", "No answer returned.")
-    else:
-        raise AttributeError("Unexpected result structure. Unable to extract 'answer'.")
-
-    # Append sources if present
-    if hasattr(result, "source_documents"):
-        response_message += "\n\n**Sources:**\n"
-        for doc in getattr(result, "source_documents", []):
-            source = doc.metadata.get("source", "Unknown")
-            response_message += f"- {source}\n"
-    elif isinstance(result, dict) and "source_documents" in result:
-        response_message += "\n\n**Sources:**\n"
-        for doc in result["source_documents"]:
-            source = doc.metadata.get("source", "Unknown")
-            response_message += f"- {source}\n"
-
-    yield response_message
     st.session_state.messages.append({"role": "assistant", "content": response_message})
