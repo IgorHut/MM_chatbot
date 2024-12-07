@@ -185,13 +185,12 @@ def get_conversational_rag_chain(llm):
 
     stuff_documents_chain = create_stuff_documents_chain(llm, prompt)
 
-    return RetrievalQAWithSourcesChain(
+    # Properly return the RetrievalQAWithSourcesChain
+    return RetrievalQAWithSourcesChain.from_components(
         retriever=retriever_chain,
         combine_documents_chain=stuff_documents_chain,
-        return_source_documents=True  # Ensure source documents are returned
+        return_source_documents=True
     )
-
-    #return create_retrieval_chain(retriever_chain, stuff_documents_chain)
 
 
 
@@ -208,10 +207,17 @@ def stream_llm_rag_response(llm_stream, messages):
     response_message = "*(RAG Response)*\n"
 
     # Generate a response
-    result = conversation_rag_chain({"messages": langchain_messages[:-1], "input": langchain_messages[-1].content})
+    result = conversation_rag_chain.invoke({
+        "messages": langchain_messages[:-1],
+        "input": langchain_messages[-1].content
+    })
 
+    # Log and validate result
+    if not isinstance(result, dict):
+        raise TypeError(f"[ERROR] Unexpected result type: {type(result)}")
+    
     # Append the response and sources
-    response_message += result['answer']
+    response_message += result.get('answer', "No answer returned.")
     if 'source_documents' in result:
         response_message += "\n\n**Sources:**\n"
         for doc in result['source_documents']:
