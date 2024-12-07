@@ -16,6 +16,7 @@ from langchain_openai import OpenAIEmbeddings, AzureOpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain, RetrievalQAWithSourcesChain
 from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.schema import HumanMessage, AIMessage
 
 dotenv.load_dotenv()
 
@@ -195,21 +196,27 @@ def get_conversational_rag_chain(llm):
 
 
 def stream_llm_rag_response(llm_stream, messages):
+    # Convert messages to LangChain's format
+    langchain_messages = []
+    for message in messages:
+        if message["role"] == "user":
+            langchain_messages.append(HumanMessage(content=message["content"]))
+        elif message["role"] == "assistant":
+            langchain_messages.append(AIMessage(content=message["content"]))
+    
     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
     response_message = "*(RAG Response)*\n"
-    result = conversation_rag_chain({"messages": messages[:-1], "input": messages[-1].content})
+
+    # Generate a response
+    result = conversation_rag_chain({"messages": langchain_messages[:-1], "input": langchain_messages[-1].content})
+
+    # Append the response and sources
     response_message += result['answer']
-    
-    # Append sources to the response
     if 'source_documents' in result:
         response_message += "\n\n**Sources:**\n"
         for doc in result['source_documents']:
             source = doc.metadata.get('source', 'Unknown')
             response_message += f"- {source}\n"
-    
-    yield response_message
-    # for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
-    #     response_message += chunk
-    #     yield chunk
 
+    yield response_message
     st.session_state.messages.append({"role": "assistant", "content": response_message})
